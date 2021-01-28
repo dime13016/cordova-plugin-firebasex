@@ -191,15 +191,17 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
         this.putKVInBundle("collapse_key", remoteMessage.getCollapseKey(), bundle);
         this.putKVInBundle("sent_time", String.valueOf(remoteMessage.getSentTime()), bundle);
         this.putKVInBundle("ttl", String.valueOf(remoteMessage.getTtl()), bundle);
-
-        if (showNotification) {
-            Intent intent = new Intent(this, OnNotificationOpenReceiver.class);
-            intent.putExtras(bundle);
-            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        String redirectUrl = data.get("redirect_url");
+        if (showNotification || redirectUrl != null) {
+            PendingIntent pendingIntent = getPendingIntent(id, bundle, redirectUrl);
 
             // Channel
             if(channelId == null || !FirebasePlugin.channelExists(channelId)){
                 channelId = FirebasePlugin.defaultChannelId;
+                if(channelId == null) {
+                    channelId = "fcm_default_channel";
+                }
+                Log.d(TAG, "Channel ID: "+channelId);
             }
             if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
                 Log.d(TAG, "Channel ID: "+channelId);
@@ -288,14 +290,14 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
 
                 int largeIconResID;
                 if (customLargeIconResID != 0 || defaultLargeIconResID != 0) {
-					if (customLargeIconResID != 0) {
-	                    largeIconResID = customLargeIconResID;
-	                    Log.d(TAG, "Large icon: custom="+icon);
-	                }else{
-	                    Log.d(TAG, "Large icon: default="+defaultLargeIconName);
-	                    largeIconResID = defaultLargeIconResID;
-	                }
-	                notificationBuilder.setLargeIcon(BitmapFactory.decodeResource(getApplicationContext().getResources(), largeIconResID));
+                    if (customLargeIconResID != 0) {
+                        largeIconResID = customLargeIconResID;
+                        Log.d(TAG, "Large icon: custom="+icon);
+                    }else{
+                        Log.d(TAG, "Large icon: default="+defaultLargeIconName);
+                        largeIconResID = defaultLargeIconResID;
+                    }
+                    notificationBuilder.setLargeIcon(BitmapFactory.decodeResource(getApplicationContext().getResources(), largeIconResID));
                 }
             }
 
@@ -331,6 +333,7 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
             // Build notification
             Notification notification = notificationBuilder.build();
 
+
             // Display notification
             NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             Log.d(TAG, "show notification: "+notification.toString());
@@ -338,6 +341,19 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
         }
         // Send to plugin
         FirebasePlugin.sendMessage(bundle, this.getApplicationContext());
+    }
+
+    private PendingIntent getPendingIntent(String id, Bundle bundle, String redirectUrl) {
+        if(redirectUrl != null) {
+            Intent notificationIntent = new Intent(Intent.ACTION_VIEW);
+            notificationIntent.setData(Uri.parse(redirectUrl));
+            return PendingIntent.getActivity(this, 0, notificationIntent,
+                    PendingIntent.FLAG_IMMUTABLE);
+        } else {
+            Intent intent = new Intent(this, OnNotificationOpenReceiver.class);
+            intent.putExtras(bundle);
+            return PendingIntent.getBroadcast(this, id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        }
     }
 
     private void putKVInBundle(String k, String v, Bundle b){
